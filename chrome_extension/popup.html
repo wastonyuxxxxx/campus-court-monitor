@@ -9,10 +9,11 @@
   <body>
     <main>
       <header>
-        <div class="eyebrow">TENNIS COURT MONITOR</div>
         <h1>空场提醒</h1>
         <p id="status" class="status">读取状态中…</p>
       </header>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
       <section aria-labelledby="openSlotsHeading">
         <h2 id="openSlotsHeading">开放场次</h2>
@@ -21,38 +22,74 @@
         <ul id="openSlots" class="slot-list" hidden></ul>
       </section>
 
-      <section>
-        <h2>监控场馆</h2>
-        <div id="venues" class="check-grid"></div>
-      </section>
+      <details class="collapsible-section">
+        <summary>
+          <span>监控场馆</span>
+          <span id="venueSummary" class="summary-detail"></span>
+        </summary>
+        <div id="venues" class="check-grid collapsible-body"></div>
+      </details>
 
-      <section>
-        <h2>监控日期</h2>
-        <div id="weekdays" class="check-grid days"></div>
-      </section>
+      <details class="collapsible-section">
+        <summary>
+          <span>监控日期与时段</span>
+          <span id="filterSummary" class="summary-detail"></span>
+        </summary>
+        <div class="collapsible-body">
+          <h2>监控日期</h2>
+          <div id="weekdays" class="check-grid days"></div>
+          <section class="time-row">
+            <label class="time-field"><span>开始</span><input id="startTime" class="time-picker" type="time" value="" /></label>
+            <label class="time-field"><span>结束</span><input id="endTime" class="time-picker" type="time" value="" /></label>
+          </section>
+          <p class="footnote">默认监控每天全部时段；开始和结束时间都留空表示全天。</p>
+        </div>
+      </details>
 
-      <section class="time-row">
-        <label>开始 <input id="startTime" type="time" value="" /></label>
-        <label>结束 <input id="endTime" type="time" value="" /></label>
-      </section>
-      <p class="footnote">默认监控每天全部时段；选择星期或同时填写开始、结束时间即可筛选。时间留空表示全天。</p>
+      <details class="auto-settings">
+        <summary>
+          <span>自动检查设置</span>
+          <span id="autoSummary" class="auto-summary"></span>
+        </summary>
+        <div class="auto-settings-body">
+          <div class="auto-settings-tools">
+            <label class="auto-toggle" for="autoEnabled">
+              <input id="autoEnabled" type="checkbox" />
+              <span>开启自动检查</span>
+            </label>
+            <button id="resetAutoDefaults" class="reset-auto" type="button">恢复默认</button>
+          </div>
+          <p id="scheduleSummary" class="footnote"></p>
+          <p class="footnote">默认：每天 06:30–07:30 每 30 秒，其余时间每 30 分钟；时段和间隔可修改。</p>
 
-      <section class="interval-row">
-        <label for="interval">检查间隔</label>
-        <select id="interval">
-          <option value="1">每分钟</option>
-          <option value="2">每 2 分钟</option>
-          <option value="5">每 5 分钟</option>
-          <option value="10">每 10 分钟</option>
-        </select>
-      </section>
+          <div class="rush-window">
+            <h2>高频时段</h2>
+            <div class="time-row">
+              <label class="time-field"><span>开始</span><input id="rushStartTime" class="time-picker" type="time" /></label>
+              <label class="time-field"><span>结束</span><input id="rushEndTime" class="time-picker" type="time" /></label>
+            </div>
+          </div>
+
+          <section class="frequency-settings" aria-labelledby="frequencyHeading">
+            <h2 id="frequencyHeading">检查频率</h2>
+            <div class="frequency-row">
+              <label for="rushInterval">高频时段</label>
+              <span class="frequency-value"><input id="rushInterval" type="number" min="30" max="600" step="1" aria-label="高频时段间隔（秒）" /><span>秒</span></span>
+            </div>
+            <div class="frequency-row">
+              <label for="regularInterval">其余时间</label>
+              <span class="frequency-value"><input id="regularInterval" type="number" min="1" max="180" step="1" aria-label="常规时段间隔（分钟）" /><span>分钟</span></span>
+            </div>
+            <p class="footnote">高频间隔按整秒填写，常规间隔按整分钟填写；最短 30 秒。</p>
+          </section>
+        </div>
+      </details>
 
       <div class="actions">
         <button id="save" class="secondary">保存设置</button>
-        <button id="start" class="primary">开始监控</button>
-        <button id="stop" class="stop">停止</button>
+        <button id="manualCheck" class="primary">立即检查</button>
       </div>
-      <p class="footnote">仅读取周历；预约需要你自己完成。Chrome 运行时每分钟检查。</p>
+      <p class="footnote">仅读取周历；预约需要你自己完成。手动检查只执行一轮。定时触发可能稍有延后；自动检查需要 Chrome 运行且 Mac 不休眠。</p>
     </main>
     <script src="config.js"></script>
     <script src="popup.js"></script>

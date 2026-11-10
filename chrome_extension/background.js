@@ -1,16 +1,20 @@
 importScripts("config.js");
 
+const BACKGROUND_API_VERSION = 2;
 const CONFIG = globalThis.TENNIS_MONITOR_CONFIG;
 const VENUE_BY_NAME = new Map(CONFIG.venues.map((venue) => [venue.name, venue]));
 const DEFAULT_SETTINGS = {
-  enabled: false,
+  autoEnabled: true,
   venues: CONFIG.venues
     .map((venue) => venue.name)
     .filter((name) => name !== "张江学生活动中心-网球"),
   weekdays: CONFIG.weekdays.map((day) => day.value),
   startTime: "",
   endTime: "",
-  intervalMinutes: 1
+  rushStartTime: "06:30",
+  rushEndTime: "07:30",
+  rushIntervalSeconds: 30,
+  regularIntervalMinutes: 30
 };
 
 let pollInFlight = false;
@@ -18,7 +22,16 @@ const pendingReads = new Map();
 
 async function getSettings() {
   const { settings } = await chrome.storage.local.get("settings");
-  return { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  if (!settings) return { ...DEFAULT_SETTINGS };
+  const normalized = { ...DEFAULT_SETTINGS, ...settings };
+  if (typeof settings.autoEnabled !== "boolean") {
+    // Migrate the previous monitor switch to the new automatic-check switch.
+    normalized.autoEnabled = settings.enabled === true;
+  }
+  delete normalized.enabled;
+  delete normalized.intervalMinutes;
+  delete normalized.rushIntervalMinutes;
+  return normalized;
 }
 
 function validSettings(settings) {
@@ -26,27 +39,29 @@ function validSettings(settings) {
   const noTimeFilter = settings.startTime === "" && settings.endTime === "";
   const start = /^\d{2}:\d{2}$/.test(settings.startTime) ? settings.startTime : "";
   const end = /^\d{2}:\d{2}$/.test(settings.endTime) ? settings.endTime : "";
+  const rushStart = /^\d{2}:\d{2}$/.test(settings.rushStartTime) ? settings.rushStartTime : "";
+  const rushEnd = /^\d{2}:\d{2}$/.test(settings.rushEndTime) ? settings.rushEndTime : "";
   return (
+    typeof settings.autoEnabled === "boolean" &&
     Array.isArray(settings.venues) &&
     settings.venues.length > 0 &&
     settings.venues.every((name) => allowed.has(name)) &&
     Array.isArray(settings.weekdays) &&
     settings.weekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) &&
     (noTimeFilter || (start && end && start < end)) &&
-    Number.isInteger(settings.intervalMinutes) &&
-    settings.intervalMinutes >= 1 &&
-    settings.intervalMinutes <= 10
+    rushStart && rushEnd && rushStart < rushEnd &&
+    Number.isInteger(settings.rushIntervalSeconds) && settings.rushIntervalSeconds >= 30 && settings.rushIntervalSeconds <= 600 &&
+    Number.isInteger(settings.regularIntervalMinutes) && settings.regularIntervalMinutes >= 1 && settings.regularIntervalMinutes <= 180
   );
 }
 
 async function getStatus() {
   const stored = await chrome.storage.local.get([
-    "settings",
     "lastCheck",
     "previousAvailability",
     "lastError"
   ]);
-  const settings = { ...DEFAULT_SETTINGS, ...(stored.settings || {}) };
+  const settings = await getSettings();
   const now = new Date();
   const openSlots = [];
   for (const [key, available] of Object.entries(stored.previousAvailability || {})) {
@@ -59,10 +74,12 @@ async function getStatus() {
   }
   openSlots.sort((a, b) => formatSlot(a).localeCompare(formatSlot(b)) || a.venue.localeCompare(b.venue, "zh-CN"));
   return {
+    apiVersion: BACKGROUND_API_VERSION,
     settings,
     lastCheck: stored.lastCheck || null,
     openSlots,
-    lastError: stored.lastError || ""
+    lastError: stored.lastError || "",
+    checking: pollInFlight
   };
 }
 
@@ -125,18 +142,76 @@ function formatSlot(slot) {
   return `${slot.date} ${slot.time}`;
 }
 
-async function runPoll() {
-  if (pollInFlight) return;
-  const status = await getStatus();
-  const settings = status.settings;
-  if (!settings.enabled) return;
+function nextAutoCheckAt(now, settings) {
+  const today = new Date(now);
+  const rushStart = new Date(today);
+  const [startHour, startMinute] = settings.rushStartTime.split(":").map(Number);
+  rushStart.setHours(startHour, startMinute, 0, 0);
+  const rushEnd = new Date(today);
+  const [endHour, endMinute] = settings.rushEndTime.split(":").map(Number);
+  rushEnd.setHours(endHour, endMinute, 0, 0);
+  const inRushWindow = now >= rushStart && now < rushEnd;
+  const intervalMs = inRushWindow
+    ? settings.rushIntervalSeconds * 1_000
+    : settings.regularIntervalMinutes * 60_000;
+  let next = new Date(now.getTime() + intervalMs);
 
+  if (inRushWindow && next > rushEnd) next = rushEnd;
+  if (!inRushWindow) {
+    const upcomingRushStart = new Date(rushStart);
+    if (now >= rushStart) upcomingRushStart.setDate(upcomingRushStart.getDate() + 1);
+    if (next > upcomingRushStart) next = upcomingRushStart;
+  }
+  return next;
+}
+
+async function scheduleNextAutoCheck(baseTime = new Date()) {
+  const settings = await getSettings();
+  if (!settings.autoEnabled) {
+    await chrome.alarms.clear("tennis-poll");
+    await closeMonitorTab();
+    return;
+  }
+  const now = new Date();
+  let next = nextAutoCheckAt(baseTime, settings);
+  while (next <= now) next = nextAutoCheckAt(next, settings);
+  await chrome.alarms.create("tennis-poll", { when: next.getTime() });
+}
+
+async function closeMonitorTab() {
+  if (pollInFlight) return;
+  const { monitorTabId } = await chrome.storage.local.get("monitorTabId");
+  if (!Number.isInteger(monitorTabId)) return;
+  try {
+    await chrome.tabs.remove(monitorTabId);
+  } catch (_error) {
+    // The tab may already have been closed by Chrome or the user.
+  }
+  await chrome.storage.local.remove("monitorTabId");
+}
+
+async function runPoll({ manual = false } = {}) {
+  if (pollInFlight) return false;
   pollInFlight = true;
+  const pollStartedAt = new Date();
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch (error) {
+    pollInFlight = false;
+    await chrome.storage.local.set({ lastError: error.message || "读取监控设置失败" });
+    return false;
+  }
+  if (!manual && !settings.autoEnabled) {
+    pollInFlight = false;
+    return false;
+  }
+
   let tabId = null;
   const errors = [];
   const newlyAvailable = [];
   const current = {};
-  const now = new Date();
+  const now = pollStartedAt;
   const { previousAvailability = {}, monitorTabId } = await chrome.storage.local.get([
     "previousAvailability",
     "monitorTabId"
@@ -164,7 +239,7 @@ async function runPoll() {
     }
 
     for (const venue of settings.venues) {
-      if (!(await getSettings()).enabled) break;
+      if (!manual && !(await getSettings()).autoEnabled) break;
       const target = VENUE_BY_NAME.get(venue);
       if (!target) continue;
       try {
@@ -201,7 +276,7 @@ async function runPoll() {
       lastError: errors.join("；")
     });
 
-    if ((await getSettings()).enabled && newlyAvailable.length > 0) {
+    if (newlyAvailable.length > 0) {
       const lines = newlyAvailable.slice(0, 4).map((slot) => `${slot.venue} ${formatSlot(slot)}`);
       if (newlyAvailable.length > 4) lines.push(`另有 ${newlyAvailable.length - 4} 个场次`);
       notify("网球场有空场", lines.join("；"));
@@ -223,49 +298,35 @@ async function runPoll() {
     await chrome.action.setBadgeBackgroundColor({ color: "#b42318" });
   } finally {
     pollInFlight = false;
+    try {
+      await scheduleNextAutoCheck(pollStartedAt);
+    } catch (error) {
+      await chrome.storage.local.set({ lastError: `下次自动检查未能安排：${error.message || "未知错误"}` });
+    }
   }
-}
-
-async function startMonitoring() {
-  const settings = await getSettings();
-  settings.enabled = true;
-  await chrome.storage.local.set({ settings });
-  await chrome.alarms.clear("tennis-poll");
-  await chrome.alarms.create("tennis-poll", {
-    delayInMinutes: 1,
-    periodInMinutes: settings.intervalMinutes
-  });
-  runPoll();
-}
-
-async function stopMonitoring() {
-  const settings = await getSettings();
-  settings.enabled = false;
-  await chrome.storage.local.set({ settings });
-  await chrome.alarms.clear("tennis-poll");
-  const { monitorTabId } = await chrome.storage.local.get("monitorTabId");
-  if (Number.isInteger(monitorTabId)) {
-    chrome.tabs.remove(monitorTabId).catch(() => {});
-    await chrome.storage.local.remove("monitorTabId");
-  }
-  await chrome.action.setBadgeText({ text: "" });
+  return true;
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const { settings } = await chrome.storage.local.get("settings");
-  if (!settings) {
-    await chrome.storage.local.set({ settings: DEFAULT_SETTINGS, previousAvailability: {} });
-  }
+  const { settings, previousAvailability } = await chrome.storage.local.get([
+    "settings",
+    "previousAvailability"
+  ]);
+  await chrome.storage.local.set({
+    settings: settings ? await getSettings() : { ...DEFAULT_SETTINGS },
+    previousAvailability: previousAvailability || {}
+  });
+  const currentSettings = await getSettings();
+  if (currentSettings.autoEnabled) runPoll().catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   const settings = await getSettings();
-  if (settings.enabled) {
-    await chrome.alarms.create("tennis-poll", {
-      delayInMinutes: 1,
-      periodInMinutes: settings.intervalMinutes
-    });
-    runPoll();
+  if (settings.autoEnabled) {
+    await chrome.alarms.clear("tennis-poll");
+    runPoll().catch(() => {});
+  } else {
+    await chrome.alarms.clear("tennis-poll");
   }
 });
 
@@ -300,32 +361,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "SAVE_SETTINGS") {
     if (!validSettings(message.settings)) {
-      sendResponse({ ok: false, error: "请检查场馆、星期、时段和检查间隔设置。" });
+      sendResponse({ ok: false, error: "请检查场馆、星期、时段和自动检查设置。" });
       return;
     }
     getSettings().then(async (previous) => {
-      const settings = { ...message.settings, enabled: previous.enabled };
+      const settings = { ...message.settings };
       await chrome.storage.local.set({ settings });
-      if (settings.enabled) {
-        await chrome.alarms.clear("tennis-poll");
-        await chrome.alarms.create("tennis-poll", {
-          delayInMinutes: 1,
-          periodInMinutes: settings.intervalMinutes
-        });
-        runPoll();
+      await chrome.alarms.clear("tennis-poll");
+      if (settings.autoEnabled) {
+        if (previous.autoEnabled) {
+          await scheduleNextAutoCheck();
+        } else {
+          runPoll().catch(() => {});
+        }
+      } else {
+        await closeMonitorTab();
       }
       sendResponse({ ok: true });
-    });
+    }).catch((error) => sendResponse({ ok: false, error: error.message || "设置保存失败。" }));
     return true;
   }
 
-  if (message.type === "START") {
-    startMonitoring().then(() => sendResponse({ ok: true }));
-    return true;
-  }
-
-  if (message.type === "STOP") {
-    stopMonitoring().then(() => sendResponse({ ok: true }));
+  if (message.type === "MANUAL_CHECK") {
+    runPoll({ manual: true })
+      .then((started) => sendResponse({ ok: true, started }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || "手动检查失败。" }));
     return true;
   }
 });
