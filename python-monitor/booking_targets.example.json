@@ -1,0 +1,16 @@
+{
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "normal_interval_seconds": 1800,
+    "peak_start": "06:55",
+    "peak_end": "07:05",
+    "peak_interval_seconds": 10
+  },
+  "venues": [
+    "本北高速室外网球场-网球",
+    "国权路运动场-网球",
+    "南区网球场-网球",
+    "江湾综合体育馆-网球",
+    "江湾室外体育场-网球"
+  ]
+}

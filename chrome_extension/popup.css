@@ -1,0 +1,95 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  color: #202b27;
+  background: #f7f8f5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 360px;
+  margin: 0;
+  background: #f7f8f5;
+}
+
+main { padding: 18px; }
+
+header {
+  padding: 4px 2px 14px;
+  border-bottom: 1px solid #e3e8e2;
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  color: #527063;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .15em;
+}
+
+h1 { margin: 4px 0 6px; font-size: 22px; }
+.status { margin: 0; color: #53645c; font-size: 12px; }
+
+section { margin: 13px 0; }
+h2 { margin: 0 0 8px; font-size: 13px; }
+
+.check-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+.check-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 12px;
+}
+
+.check-grid input { accent-color: #167d55; }
+.days { grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.days label { justify-content: center; font-size: 11px; }
+.days input { margin: 0 3px 0 0; }
+
+.time-row { display: flex; gap: 18px; }
+.time-row label, .interval-row { font-size: 12px; }
+.time-row input, select {
+  margin-left: 4px;
+  border: 1px solid #ccd7ce;
+  border-radius: 7px;
+  background: white;
+  padding: 5px 7px;
+  color: #202b27;
+}
+
+.interval-row { display: flex; align-items: center; gap: 10px; }
+.interval-row select { margin-left: auto; }
+.last-check { margin: 10px 0 4px; color: #627067; font-size: 11px; }
+.error { margin: 4px 0; color: #a12a20; font-size: 11px; }
+.slot-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.slot-list li + li { margin-top: 4px; }
+.slot-list a {
+  display: block;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #e5eee7;
+  color: #164b37;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.actions { display: flex; gap: 7px; margin-top: 12px; }
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.primary { flex: 1; color: white; background: #167d55; }
+.secondary { color: #29483b; background: #e5eee7; }
+.stop { color: #6b3933; background: #f3e7e4; }
+.footnote { margin: 10px 0 0; color: #6d7871; font-size: 10px; line-height: 1.45; }

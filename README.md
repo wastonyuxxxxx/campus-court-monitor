@@ -1,2 +1,38 @@
-# tennis-court-availability
-网球场地空场提醒 · Read-only tennis court availability monitor
+# 网球场地空场提醒
+
+## 项目边界
+
+本项目目前适配复旦大学（Fudan University）的校园体育场地预约平台，监控范围限于该平台网球场详情页展示的周历。场次是否可预约，以你打开预约页面时的状态为准。
+
+- **场馆与时段**。两种实现默认检查本北高速、国权路、南区、江湾综合体育馆和江湾室外体育场五个网球场。张江可在扩展中手动启用。扩展默认每分钟检查周一至周日的全部未来场次，可按场馆、星期和时间筛选。Python 原型的场馆和检查频率由配置文件指定。
+- **预约操作**。自动化止于打开场馆详情页、读取周历和发送提醒。预约须知、场次选择、预约信息填写和最终提交都由使用者完成。
+- **Chrome 扩展**。复用当前 Chrome 会话，发送本机通知。运行期间需要 Chrome 保持打开、电脑保持唤醒。登录或周历读取失败时，扩展显示错误和最近一次读到的记录。
+- **Python 原型**。支持单场馆检查、单轮扫描和持续监控。登录和额外认证由使用者在浏览器中完成。持续监控可用 macOS 本机通知或配置 SMTP 邮件。Docker 部署为待实测原型，尚未部署到云主机。
+
+## 加载到 Chrome
+
+1. 在 Chrome 打开 `chrome://extensions`。
+2. 开启“开发者模式”，选择“加载已解压的扩展程序”。
+3. 选择本项目的 `chrome_extension` 文件夹。
+4. 点击扩展图标的“开始监控”。
+
+扩展申请定时检查、本地设置和通知权限，站点访问权限仅限该预约平台的场馆详情页。首次加载时可查看权限范围。
+
+详细说明见 [Chrome 扩展说明](chrome_extension/README.md)。
+
+## macOS 本机检查
+
+先安装 Google Chrome。从项目根目录运行以下命令安装 Python 依赖、复制默认场馆配置，并检查一个场馆的周历。
+
+```sh
+cd python-monitor
+./setup.sh
+cp -n booking_targets.example.json booking_targets.json
+.venv/bin/python tennis_booking.py --inspect --venue '本北高速室外网球场-网球'
+```
+
+如果浏览器打开登录页，请手动登录并在出现预约须知时确认。检查成功后，终端会输出周历。也可用 `--once` 扫描全部已配置场馆，或用 `--watch` 持续监控。
+
+## Docker 云端原型
+
+如需在 Linux 主机上持续运行并配置邮件提醒，见 [Docker 部署说明](python-monitor/README.cloud.md)。此原型尚未部署到云主机。

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>网球场地空场提醒</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">TENNIS COURT MONITOR</div>
+        <h1>空场提醒</h1>
+        <p id="status" class="status">读取状态中…</p>
+      </header>
+
+      <section aria-labelledby="openSlotsHeading">
+        <h2 id="openSlotsHeading">开放场次</h2>
+        <p id="lastCheck" class="last-check"></p>
+        <p id="lastError" class="error" hidden></p>
+        <ul id="openSlots" class="slot-list" hidden></ul>
+      </section>
+
+      <section>
+        <h2>监控场馆</h2>
+        <div id="venues" class="check-grid"></div>
+      </section>
+
+      <section>
+        <h2>监控日期</h2>
+        <div id="weekdays" class="check-grid days"></div>
+      </section>
+
+      <section class="time-row">
+        <label>开始 <input id="startTime" type="time" value="" /></label>
+        <label>结束 <input id="endTime" type="time" value="" /></label>
+      </section>
+      <p class="footnote">默认监控每天全部时段；选择星期或同时填写开始、结束时间即可筛选。时间留空表示全天。</p>
+
+      <section class="interval-row">
+        <label for="interval">检查间隔</label>
+        <select id="interval">
+          <option value="1">每分钟</option>
+          <option value="2">每 2 分钟</option>
+          <option value="5">每 5 分钟</option>
+          <option value="10">每 10 分钟</option>
+        </select>
+      </section>
+
+      <div class="actions">
+        <button id="save" class="secondary">保存设置</button>
+        <button id="start" class="primary">开始监控</button>
+        <button id="stop" class="stop">停止</button>
+      </div>
+      <p class="footnote">仅读取周历；预约需要你自己完成。Chrome 运行时每分钟检查。</p>
+    </main>
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
