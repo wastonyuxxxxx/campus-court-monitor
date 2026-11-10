@@ -1,18 +1,2 @@
-# Credentials and local settings
-.env
-.env.*
-!.env.example
-booking_targets.json
-
-# Browser sessions and runtime files
-profile/
-state/
-logs/
-*.log
-
-# Local dependencies and generated files
-.venv/
-__pycache__/
-*.py[cod]
 .DS_Store
 *.zip
